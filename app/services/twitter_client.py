@@ -50,6 +50,81 @@ class TwitterClient:
             print(f"❌ 내 정보 조회 에러: {e}")
             return None
 
+    async def get_user_by_username(self, username: str):
+        """
+        사용자명으로 사용자 정보 조회
+        
+        Args:
+            username: X(Twitter) 사용자명 (앳 기호 없이)
+        
+        Returns:
+            사용자 정보 딕셔너리 또는 None
+        """
+        if not self.client:
+            return None
+        
+        try:
+            # 사용자명으로 사용자 정보 가져오기
+            response = self.client.get_user(
+                username=username,
+                user_fields=["public_metrics", "description", "profile_image_url"]
+            )
+            if response.data:
+                user = response.data
+                metrics = user.public_metrics if hasattr(user, 'public_metrics') else {}
+                return {
+                    "id": user.id,
+                    "username": user.username,
+                    "name": user.name,
+                    "followers_count": metrics.get("followers_count", 0) if metrics else 0,
+                    "following_count": metrics.get("following_count", 0) if metrics else 0,
+                    "tweet_count": metrics.get("tweet_count", 0) if metrics else 0,
+                    "description": user.description if hasattr(user, 'description') else ""
+                }
+            return None
+        except Exception as e:
+            print(f"❌ 사용자 정보 조회 에러: {e}")
+            return None
+
+    async def get_user_tweets(self, user_id: str, max_results: int = 10):
+        """
+        사용자의 최근 트윗 목록 조회
+        
+        Args:
+            user_id: 사용자 ID
+            max_results: 가져올 트윗 수 (최대 100)
+        
+        Returns:
+            트윗 목록 리스트
+        """
+        if not self.client:
+            return []
+        
+        try:
+            tweets = []
+            response = self.client.get_users_tweets(
+                id=user_id,
+                max_results=min(max_results, 100),
+                tweet_fields=["public_metrics", "created_at", "text"]
+            )
+            
+            if response.data:
+                for tweet in response.data:
+                    metrics = tweet.public_metrics if hasattr(tweet, 'public_metrics') else {}
+                    tweets.append({
+                        "id": tweet.id,
+                        "text": tweet.text,
+                        "like_count": metrics.get("like_count", 0) if metrics else 0,
+                        "retweet_count": metrics.get("retweet_count", 0) if metrics else 0,
+                        "reply_count": metrics.get("reply_count", 0) if metrics else 0,
+                        "created_at": str(tweet.created_at) if hasattr(tweet, 'created_at') else None
+                    })
+            
+            return tweets
+        except Exception as e:
+            print(f"❌ 트윗 조회 에러: {e}")
+            return []
+
     async def post_tweet(self, text: str):
         """
         [핵심 기능] 트윗 쓰기
