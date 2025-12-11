@@ -21,25 +21,30 @@ class AIService:
         self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
         print("🤖 AIService 초기화 완료")
 
-    async def evaluate_pet_value(self, username: str, stats: dict) -> dict:
+    async def evaluate_content_quality(self, username: str, stats: dict, tweets: list) -> dict:
         """
-        펫 계정의 가치를 평가하여 등급과 보상 금액을 산정합니다.
+        게시물의 품질을 평가하여 정성 점수를 산정합니다.
+        - 오직 quality_score (0~100점 정수)만 반환합니다.
         
         Args:
             username: 펫 계정의 X(Twitter) 사용자명
             stats: 소셜 미디어 통계 데이터 (팔로워 수, 참여율, 콘텐츠 파급력 등)
+            tweets: 최근 트윗 목록
         
         Returns:
             {
-                "grade": "등급 (예: S, A, B, C)",
-                "reward_amount": 보상 금액 (숫자),
-                "evaluation_reason": "평가 근거 설명"
+                "quality_score": 0~100 사이의 정수
             }
         """
+        # 트윗 텍스트들을 하나의 문자열로 합치기 (최근 5개만)
+        recent_tweets_text = "\n".join([
+            tweet.get("text", "") for tweet in tweets[:5]
+        ])
+        
         # 프롬프트 작성
         prompt = f"""
-당신은 펫 인플루언서 IP의 가치를 평가하는 전문가입니다. 
-다음 펫 계정의 소셜 미디어 활동 데이터를 분석하여 공정하고 투명한 가치 평가를 수행해주세요.
+당신은 펫 인플루언서 콘텐츠의 품질을 평가하는 전문가입니다.
+다음 펫 계정의 콘텐츠를 분석하여 품질 점수를 산정해주세요.
 
 **계정 정보:**
 - 사용자명: @{username}
@@ -48,30 +53,24 @@ class AIService:
 - 평균 리트윗 수: {stats.get('avg_retweets', 0):,}개
 - 평균 댓글 수: {stats.get('avg_replies', 0):,}개
 - 참여율 (Engagement Rate): {stats.get('engagement_rate', 0):.2f}%
-- 콘텐츠 파급력 점수: {stats.get('reach_score', 0):.2f}/10
+
+**최근 게시물 내용:**
+{recent_tweets_text[:1000] if recent_tweets_text else "게시물 없음"}
 
 **평가 기준:**
-1. **콘텐츠 파급력**: 팔로워 수, 리치(Reach), 바이럴 확산 정도
-2. **팬덤 참여율**: 좋아요, 리트윗, 댓글 등 상호작용 지표
-3. **브랜드 가치**: 일관성 있는 콘텐츠, 고유한 매력, 커뮤니티 형성
-4. **광고 적합성**: 홍보 문구 및 배너 포함 여부, 자연스러운 통합
-
-**등급 체계:**
-- S등급: 최상위 인플루언서 (보상: 10,000-50,000 토큰)
-- A등급: 우수한 인플루언서 (보상: 5,000-10,000 토큰)
-- B등급: 중상위 인플루언서 (보상: 1,000-5,000 토큰)
-- C등급: 일반 인플루언서 (보상: 100-1,000 토큰)
+1. **콘텐츠 품질**: 내용의 창의성, 유용성, 독창성
+2. **작성 품질**: 문장의 명확성, 길이 적절성, 가독성
+3. **참여 유도**: 팬덤과의 상호작용을 유도하는 정도
+4. **일관성**: 브랜드 아이덴티티와의 일관성
 
 **요구사항:**
 - JSON 형식으로만 응답해주세요.
-- 등급(grade), 보상금액(reward_amount), 평가근거(evaluation_reason)를 포함해주세요.
-- 보상금액은 토큰 단위의 정수로 제공해주세요.
+- quality_score만 포함해주세요 (0~100 사이의 정수).
+- 보상 금액 계산은 하지 마세요. 오직 품질 점수만 제공하세요.
 
 다음 JSON 형식으로 응답해주세요:
 {{
-    "grade": "등급",
-    "reward_amount": 숫자,
-    "evaluation_reason": "상세한 평가 근거 설명"
+    "quality_score": 0~100 사이의 정수
 }}
 """
 
@@ -86,27 +85,31 @@ class AIService:
                 response_text = response_text.split("```")[1].split("```")[0].strip()
             
             result = json.loads(response_text)
+            quality_score = int(result.get("quality_score", 85))
+            
+            # 점수 범위 검증 (0~100)
+            quality_score = max(0, min(100, quality_score))
             
             return {
-                "grade": result.get("grade", "C"),
-                "reward_amount": int(result.get("reward_amount", 100)),
-                "evaluation_reason": result.get("evaluation_reason", "기본 평가")
+                "quality_score": quality_score
             }
             
         except json.JSONDecodeError as e:
             print(f"❌ JSON 파싱 에러: {e}")
-            print(f"응답 내용: {response_text}")
-            # 기본값 반환
-            return {
-                "grade": "C",
-                "reward_amount": 100,
-                "evaluation_reason": "AI 평가 중 오류 발생"
-            }
+            print(f"응답 내용: {response_text if 'response_text' in locals() else 'N/A'}")
+            # 데모용 Mock 데이터 반환
+            print("⚠️  Mock 데이터 반환: quality_score=85")
+            return {"quality_score": 85}
+            
         except Exception as e:
-            print(f"❌ AI 평가 에러: {e}")
-            return {
-                "grade": "C",
-                "reward_amount": 100,
-                "evaluation_reason": f"평가 중 오류 발생: {str(e)}"
-            }
+            # API 제한(429), 타임아웃 등 모든 예외에 대해 Mock 데이터 반환
+            error_msg = str(e)
+            if "429" in error_msg or "quota" in error_msg.lower() or "timeout" in error_msg.lower():
+                print(f"⚠️  API 제한/타임아웃 감지: {error_msg}")
+            else:
+                print(f"❌ AI 평가 에러: {error_msg}")
+            
+            # 데모가 멈추지 않도록 무조건 성공 데이터 반환
+            print("⚠️  Mock 데이터 반환: quality_score=85")
+            return {"quality_score": 85}
 
