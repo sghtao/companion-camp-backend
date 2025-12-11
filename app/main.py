@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.api import evaluation
+from app.api import evaluation, advertisement
 
 app = FastAPI(
     title="Companion Camp Backend",
@@ -9,6 +9,7 @@ app = FastAPI(
 
 # 라우터 등록
 app.include_router(evaluation.router)
+app.include_router(advertisement.router)
 
 
 @app.get("/")
