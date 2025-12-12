@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-from app.api import evaluation, advertisement
+from app.api import evaluation, advertisement, coins
+from app.db import init_db
 
 app = FastAPI(
     title="Companion Camp Backend",
@@ -7,9 +8,17 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+@app.on_event("startup")
+async def startup_event():
+    """애플리케이션 시작 시 데이터베이스 초기화"""
+    init_db()
+
+
 # 라우터 등록
 app.include_router(evaluation.router)
 app.include_router(advertisement.router)
+app.include_router(coins.router)
 
 
 @app.get("/")
