@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, HTTPException
 from app.services.ai_service import AIService
 from app.services.social_service import SocialService
 from app.services.contract_service import ContractService
@@ -100,9 +100,12 @@ async def analyze_pet_account(
         
         # ===== 3단계: 정량 데이터 확인 =====
         print(f"\n📈 [3단계] 정량 데이터 확인")
+        # stats None 체크 추가
+        if not stats:
+            stats = {}
         # stats에서 reach_score를 가져와서 100점 만점으로 변환
         social_reach_score = stats.get("reach_score", 0.0)  # 0~10 점수
-        social_score = (social_reach_score / 10.0) * 100  # 0~100 점수로 변환
+        social_score = (social_reach_score / 10.0) * 100 if social_reach_score > 0 else 0.0  # 0~100 점수로 변환
         
         print(f"   - 팔로워 수: {stats.get('followers', 0):,}명")
         print(f"   - 참여율: {stats.get('engagement_rate', 0):.2f}%")
@@ -124,11 +127,19 @@ async def analyze_pet_account(
         print(f"   - 최종 점수: {final_score}/100")
         print(f"   - 계산식: ({social_score:.2f} * 0.4) + ({ai_score} * 0.6) = {final_score}")
         
-        # 컨트랙트에 트랜잭션 전송
-        reward_result = await contract_service.execute_reward_transaction(
-            wallet_address=wallet_address,
-            score=final_score
-        )
+        # 컨트랙트에 트랜잭션 전송 (에러 처리 추가)
+        try:
+            reward_result = await contract_service.execute_reward_transaction(
+                wallet_address=wallet_address,
+                score=final_score
+            )
+        except Exception as e:
+            print(f"⚠️  Contract service failed: {e}")
+            # Fallback to safe defaults
+            reward_result = {
+                "tx_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+                "rewarded_amount": 0
+            }
         
         # ===== 6단계: 결과 반환 =====
         print(f"\n✅ [6단계] 결과 반환 완료")
@@ -145,16 +156,18 @@ async def analyze_pet_account(
                 "final_score": final_score
             },
             "reward": {
-                "tx_hash": reward_result.get("tx_hash"),
-                "amount": reward_result.get("rewarded_amount"),
+                "tx_hash": reward_result.get("tx_hash") or "N/A",
+                "amount": reward_result.get("rewarded_amount") or 0,
                 "wallet_address": wallet_address
             }
         }
         
     except Exception as e:
         print(f"❌ 오류 발생: {str(e)}")
-        return {
-            "error": str(e),
-            "message": "펫 계정 분석 중 오류가 발생했습니다."
-        }
+        import traceback
+        traceback.print_exc()  # Better debugging
+        raise HTTPException(
+            status_code=500,
+            detail=f"펫 계정 분석 중 오류가 발생했습니다: {str(e)}"
+        )
 

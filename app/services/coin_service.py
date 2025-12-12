@@ -41,7 +41,15 @@ class CoinService:
                         logger.error(f"DexScreener API error: {response.status}")
                         return self._get_fallback_data()
                     
-                    data = await response.json()
+                    # Safe JSON parsing
+                    try:
+                        data = await response.json()
+                    except aiohttp.ContentTypeError as e:
+                        logger.error(f"Invalid JSON response from DexScreener: {e}")
+                        return self._get_fallback_data()
+                    except Exception as e:
+                        logger.error(f"Error parsing JSON: {e}")
+                        return self._get_fallback_data()
                     
                     # Parse DexScreener response
                     pairs = data.get("pairs", [])
@@ -61,8 +69,9 @@ class CoinService:
                         
                         # Check if this token address matches any of our target addresses (case-insensitive)
                         if token_address_upper in address_map:
-                            # Use the pair with highest liquidity
-                            liquidity_usd = float(pair.get("liquidity", {}).get("usd", 0) or 0)
+                            # Use the pair with highest liquidity (safer nested access)
+                            liquidity_data = pair.get("liquidity") or {}
+                            liquidity_usd = float(liquidity_data.get("usd", 0) or 0)
                             
                             # Use uppercase address as key for consistency
                             if token_address_upper not in coin_map:
@@ -84,14 +93,18 @@ class CoinService:
                         pair = coin_data["pair"]
                         base_token = pair.get("baseToken", {})
                         
+                        # Safer nested dict access
+                        price_change_data = pair.get("priceChange") or {}
+                        volume_data = pair.get("volume") or {}
+                        
                         coin_info = {
                             "name": base_token.get("name", "Unknown"),
                             "symbol": base_token.get("symbol", "UNKNOWN"),
                             "priceUsd": pair.get("priceUsd", "0"),
-                            "priceChange24h": pair.get("priceChange", {}).get("h24", 0),
+                            "priceChange24h": price_change_data.get("h24", 0) or 0,
                             "imageUrl": base_token.get("logoURI", ""),
                             "address": coin_data.get("original_address", address_upper),
-                            "volume24h": pair.get("volume", {}).get("h24", 0),
+                            "volume24h": volume_data.get("h24", 0) or 0,
                             "liquidity": coin_data["liquidity"]
                         }
                         result.append(coin_info)

@@ -7,6 +7,7 @@ from app.services.coin_service import CoinService
 from app.db import insert_purchase, get_history_by_username
 from typing import List, Dict
 from pydantic import BaseModel
+import sqlite3
 
 router = APIRouter(prefix="/coins", tags=["coins"])
 
@@ -102,17 +103,25 @@ async def purchase_coin(
         
         if purchase.amount <= 0:
             raise HTTPException(status_code=400, detail="Amount must be greater than 0")
+        if purchase.amount > 1e15:  # Prevent unrealistic values
+            raise HTTPException(status_code=400, detail="Amount too large")
         
         if not purchase.tx_hash or not purchase.tx_hash.strip():
             raise HTTPException(status_code=400, detail="Transaction hash is required")
         
         # Save to database
-        saved_id = insert_purchase(
-            username=purchase.username,
-            coin_symbol=purchase.coin_symbol.upper(),
-            amount=purchase.amount,
-            tx_hash=purchase.tx_hash
-        )
+        try:
+            saved_id = insert_purchase(
+                username=purchase.username,
+                coin_symbol=purchase.coin_symbol.upper(),
+                amount=purchase.amount,
+                tx_hash=purchase.tx_hash
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Database error: Failed to save purchase. {str(e)}"
+            )
         
         return PurchaseResponse(
             status="success",
