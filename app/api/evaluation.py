@@ -115,8 +115,15 @@ async def analyze_pet_account(
         print(f"\n🤖 [4단계] 정성 평가 (AI) 시작")
         ai_result = await ai_service.evaluate_content_quality(username, stats, tweets)
         ai_score = ai_result.get("quality_score", 85)
+        identity_score = ai_result.get("identity_score", 0)
+        fandom_score = ai_result.get("fandom_score", 0)
+        safety_score = ai_result.get("safety_score", 0)
+        analysis_summary = ai_result.get("analysis_summary", "분석 결과 없음")
         
         print(f"   - AI 품질 점수: {ai_score}/100")
+        print(f"   - Identity 점수: {identity_score}/40")
+        print(f"   - Fandom 점수: {fandom_score}/30")
+        print(f"   - Safety 점수: {safety_score}/30")
         
         # ===== 5단계: 최종 점수 산정 & 컨트랙트 전송 =====
         print(f"\n💰 [5단계] 최종 점수 산정 & 컨트랙트 전송")
@@ -153,8 +160,14 @@ async def analyze_pet_account(
             "scores": {
                 "social_score": round(social_score, 2),
                 "ai_score": ai_score,
-                "final_score": final_score
+                "final_score": final_score,
+                "details": {
+                    "identity": identity_score,
+                    "fandom": fandom_score,
+                    "safety": safety_score
+                }
             },
+            "analysis_summary": analysis_summary,
             "reward": {
                 "tx_hash": reward_result.get("tx_hash") or "N/A",
                 "amount": reward_result.get("rewarded_amount") or 0,

@@ -23,8 +23,8 @@ class AIService:
 
     async def evaluate_content_quality(self, username: str, stats: dict, tweets: list) -> dict:
         """
-        게시물의 품질을 평가하여 정성 점수를 산정합니다.
-        - 오직 quality_score (0~100점 정수)만 반환합니다.
+        게시물의 품질을 평가하여 Companion IP Index (CII) 점수를 산정합니다.
+        - Identity, Fandom, Safety 3가지 축으로 평가하고 상세 정보를 반환합니다.
         
         Args:
             username: 펫 계정의 X(Twitter) 사용자명
@@ -33,7 +33,11 @@ class AIService:
         
         Returns:
             {
-                "quality_score": 0~100 사이의 정수
+                "quality_score": 0~100 사이의 정수 (세 점수의 합계),
+                "identity_score": 0~40 사이의 정수,
+                "fandom_score": 0~30 사이의 정수,
+                "safety_score": 0~30 사이의 정수,
+                "analysis_summary": "분석 요약 텍스트"
             }
         """
         # 트윗 텍스트들을 하나의 문자열로 합치기 (최근 5개만)
@@ -43,34 +47,39 @@ class AIService:
         
         # 프롬프트 작성
         prompt = f"""
-당신은 펫 인플루언서 콘텐츠의 품질을 평가하는 전문가입니다.
-다음 펫 계정의 콘텐츠를 분석하여 품질 점수를 산정해주세요.
+당신은 'Companion Camp'의 수석 IP 가치 평가관(Chief IP Valuator)입니다.
+제공된 펫 계정 데이터를 분석하여, 이 계정이 **'지속 가능한 디지털 IP'로서 얼마나 가치가 있는지** 냉철하게 평가하십시오.
 
-**계정 정보:**
-- 사용자명: @{username}
-- 팔로워 수: {stats.get('followers', 0):,}명
-- 평균 좋아요 수: {stats.get('avg_likes', 0):,}개
-- 평균 리트윗 수: {stats.get('avg_retweets', 0):,}개
-- 평균 댓글 수: {stats.get('avg_replies', 0):,}개
-- 참여율 (Engagement Rate): {stats.get('engagement_rate', 0):.2f}%
+**[분석 대상 데이터]**
+- 계정: @{username}
+- 기본 영향력: 팔로워 {stats.get('followers', 0):,}명, 참여율 {stats.get('engagement_rate', 0):.2f}%
+- 최근 콘텐츠 내용:
+{recent_tweets_text[:2000]}
 
-**최근 게시물 내용:**
-{recent_tweets_text[:1000] if recent_tweets_text else "게시물 없음"}
+**[평가 기준표 (Companion IP Index)]**
 
-**평가 기준:**
-1. **콘텐츠 품질**: 내용의 창의성, 유용성, 독창성
-2. **작성 품질**: 문장의 명확성, 길이 적절성, 가독성
-3. **참여 유도**: 팬덤과의 상호작용을 유도하는 정도
-4. **일관성**: 브랜드 아이덴티티와의 일관성
+1. **🎨 IP 정체성 (Identity - 40점 만점)**
+   - **페르소나(15점):** 말투, 컨셉, 캐릭터의 확실성과 일관성을 평가하세요.
+   - **스토리텔링(15점):** 단순 기록을 넘어, 서사와 맥락이 있어 팬들이 다음을 기대하게 만드는지 보세요.
+   - **OSMU 잠재력(10점):** 굿즈, 밈코인, 캐릭터 상품으로 확장될 때 매력적인 '시그니처'가 있는지 판단하세요.
 
-**요구사항:**
-- JSON 형식으로만 응답해주세요.
-- quality_score만 포함해주세요 (0~100 사이의 정수).
-- 보상 금액 계산은 하지 마세요. 오직 품질 점수만 제공하세요.
+2. **🔥 팬덤 결속력 (Fandom - 30점 만점)**
+   - **참여 유도(15점):** 텍스트가 팬들의 대화와 반응을 얼마나 적극적으로 이끌어내는지 평가하세요.
+   - **충성도 시그널(15점):** 단순 '좋아요'를 넘어, 팬들이 이 IP를 '소유'하고 싶어 할 만큼의 매력(Cult-like)이 있는지 보세요.
 
-다음 JSON 형식으로 응답해주세요:
+3. **🛡️ 브랜드 안전성 (Safety - 30점 만점)**
+   - **광고 적합성(15점):** 사료, 의류 등 브랜드 광고가 붙었을 때 자연스러운 톤앤매너인가요?
+   - **클린 지수(15점):** 혐오 표현, 논란, 어뷰징(스팸) 가능성 없이 안전한가요?
+
+**[출력 형식]**
+반드시 아래 JSON 포맷으로만 응답하세요. (주석 제외)
+
 {{
-    "quality_score": 0~100 사이의 정수
+    "identity_score": 0,  // 40점 만점
+    "fandom_score": 0,    // 30점 만점
+    "safety_score": 0,    // 30점 만점
+    "quality_score": 0,   // 위 세 점수의 합계 (0~100)
+    "analysis_summary": "이 IP의 강점과 약점을 150자 이내로 요약 (예: 독보적인 '심술궂은 고양이' 컨셉으로 굿즈 잠재력이 높으나, 팬들과의 소통이 다소 일방적임)"
 }}
 """
 
@@ -85,21 +94,40 @@ class AIService:
                 response_text = response_text.split("```")[1].split("```")[0].strip()
             
             result = json.loads(response_text)
-            quality_score = int(result.get("quality_score", 85))
             
-            # 점수 범위 검증 (0~100)
+            # 점수 추출 및 범위 검증
+            identity_score = int(result.get("identity_score", 0))
+            fandom_score = int(result.get("fandom_score", 0))
+            safety_score = int(result.get("safety_score", 0))
+            quality_score = int(result.get("quality_score", identity_score + fandom_score + safety_score))
+            analysis_summary = result.get("analysis_summary", "분석 결과 없음")
+            
+            # 점수 범위 검증
+            identity_score = max(0, min(40, identity_score))
+            fandom_score = max(0, min(30, fandom_score))
+            safety_score = max(0, min(30, safety_score))
             quality_score = max(0, min(100, quality_score))
             
             return {
-                "quality_score": quality_score
+                "quality_score": quality_score,
+                "identity_score": identity_score,
+                "fandom_score": fandom_score,
+                "safety_score": safety_score,
+                "analysis_summary": analysis_summary
             }
             
         except json.JSONDecodeError as e:
             print(f"❌ JSON 파싱 에러: {e}")
             print(f"응답 내용: {response_text if 'response_text' in locals() else 'N/A'}")
             # 데모용 Mock 데이터 반환
-            print("⚠️  Mock 데이터 반환: quality_score=85")
-            return {"quality_score": 85}
+            print("⚠️  Mock 데이터 반환: 기본값 사용")
+            return {
+                "quality_score": 85,
+                "identity_score": 35,
+                "fandom_score": 25,
+                "safety_score": 25,
+                "analysis_summary": "분석 결과 없음"
+            }
             
         except Exception as e:
             # API 제한(429), 타임아웃 등 모든 예외에 대해 Mock 데이터 반환
@@ -110,6 +138,12 @@ class AIService:
                 print(f"❌ AI 평가 에러: {error_msg}")
             
             # 데모가 멈추지 않도록 무조건 성공 데이터 반환
-            print("⚠️  Mock 데이터 반환: quality_score=85")
-            return {"quality_score": 85}
+            print("⚠️  Mock 데이터 반환: 기본값 사용")
+            return {
+                "quality_score": 85,
+                "identity_score": 35,
+                "fandom_score": 25,
+                "safety_score": 25,
+                "analysis_summary": "분석 결과 없음"
+            }
 
